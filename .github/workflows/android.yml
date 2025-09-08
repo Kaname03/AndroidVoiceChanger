@@ -1,4 +1,5 @@
 name: Build Android APK
+
 on:
   push:
   workflow_dispatch:
@@ -8,15 +9,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # JDK 17（AGP 8系は必須）
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
+
+      # Android SDK
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-      - name: Build
-        run: ./gradlew assembleRelease
+
+      # Gradle をActions側で用意して実行（Wrapper不要）
+      - name: Build with Gradle
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-version: 8.7
+          arguments: assembleRelease
+
+      # 生成された APK を成果物に
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
