@@ -84,5 +84,5 @@ void VoiceChangerAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiB
 
 AudioProcessorEditor* VoiceChangerAudioProcessor::createEditor()
 {
-    return new GenericAudioProcessorEditor (*this); // まずは汎用UI
+    return new VoiceChangerAudioProcessorEditor(*this);
 }
