@@ -2,8 +2,15 @@ name: Build JUCE Plugin
 
 on:
   push:
-    branches: [ main, master ]
+    branches:
+      - '**'
   pull_request:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   macos:
@@ -19,32 +26,54 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
             -G "Xcode"
-      - name: Build (Release)
-        run: |
-          cmake --build build --config Release
 
-      - name: Package artifacts
+      - name: Build (Release)
+        run: cmake --build build --config Release
+
+      - name: Locate artefacts
+        id: find_paths
         run: |
           set -e
-          ARTE=build/AndroidVoiceChanger_artefacts/Release
+          ARTE="build"/*"_artefacts"/Release
+          echo "arte_dir=$ARTE" >> $GITHUB_OUTPUT
+          echo "Found: $ARTE"
+          ls -R "$ARTE" || true
+
+      - name: Package artefacts
+        run: |
+          set -e
+          ARTE="${{ steps.find_paths.outputs.arte_dir }}"
           mkdir -p upload
           # VST3
-          if [ -d "$ARTE/VST3/AndroidVoiceChanger.vst3" ]; then
-            ditto -c -k --sequesterRsrc --keepParent "$ARTE/VST3/AndroidVoiceChanger.vst3" "upload/AndroidVoiceChanger-macOS-vst3.zip"
+          if [ -d "$ARTE/VST3" ]; then
+            for p in "$ARTE"/VST3/*.vst3 ; do
+              [ -e "$p" ] || continue
+              base="$(basename "$p" .vst3)"
+              ditto -c -k --sequesterRsrc --keepParent "$p" "upload/${base}-macOS-vst3.zip"
+            done
           fi
-          # AU (.component)
-          if [ -d "$ARTE/AU/AndroidVoiceChanger.component" ]; then
-            ditto -c -k --sequesterRsrc --keepParent "$ARTE/AU/AndroidVoiceChanger.component" "upload/AndroidVoiceChanger-macOS-au.zip"
+          # AU
+          if [ -d "$ARTE/AU" ]; then
+            for p in "$ARTE"/AU/*.component ; do
+              [ -e "$p" ] || continue
+              base="$(basename "$p" .component)"
+              ditto -c -k --sequesterRsrc --keepParent "$p" "upload/${base}-macOS-au.zip"
+            done
           fi
-          # Standalone app
-          if [ -d "$ARTE/Standalone/AndroidVoiceChanger.app" ]; then
-            ditto -c -k --sequesterRsrc --keepParent "$ARTE/Standalone/AndroidVoiceChanger.app" "upload/AndroidVoiceChanger-macOS-standalone.zip"
+          # Standalone
+          if [ -d "$ARTE/Standalone" ]; then
+            for p in "$ARTE"/Standalone/*.app ; do
+              [ -e "$p" ] || continue
+              base="$(basename "$p" .app)"
+              ditto -c -k --sequesterRsrc --keepParent "$p" "upload/${base}-macOS-standalone.zip"
+            done
           fi
 
       - name: Upload artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: AndroidVoiceChanger-macOS
+          name: macOS-builds
           path: upload/*
 
   windows:
@@ -64,20 +93,37 @@ jobs:
       - name: Build (Release)
         run: cmake --build build --config Release
 
-      - name: Package artifacts
+      - name: Locate artefacts
+        id: find_paths_win
         shell: pwsh
         run: |
-          $arte = "build/AndroidVoiceChanger_artefacts/Release"
+          $arte = Get-ChildItem -Directory -Recurse build | Where-Object { $_.Name -like "*_artefacts" } | Select-Object -First 1
+          if (-not $arte) { Write-Host "No artefacts dir"; exit 0 }
+          $out = Join-Path $arte.FullName "Release"
+          Write-Host "Found: $out"
+          "arte_dir=$out" >> $env:GITHUB_OUTPUT
+
+      - name: Package artefacts
+        shell: pwsh
+        run: |
+          $arte = "${{ steps.find_paths_win.outputs.arte_dir }}"
           New-Item -ItemType Directory -Force -Path upload | Out-Null
-          if (Test-Path "$arte/VST3/AndroidVoiceChanger.vst3") {
-            Compress-Archive -Path "$arte/VST3/AndroidVoiceChanger.vst3" -DestinationPath "upload/AndroidVoiceChanger-windows-vst3.zip"
+          if (Test-Path "$arte/VST3") {
+            Get-ChildItem "$arte/VST3" -Filter *.vst3 | ForEach-Object {
+              $base = $_.BaseName
+              Compress-Archive -Path $_.FullName -DestinationPath ("upload/{0}-windows-vst3.zip" -f $base)
+            }
           }
-          if (Test-Path "$arte/Standalone/AndroidVoiceChanger.exe") {
-            Compress-Archive -Path "$arte/Standalone/AndroidVoiceChanger.exe" -DestinationPath "upload/AndroidVoiceChanger-windows-standalone.zip"
+          if (Test-Path "$arte/Standalone") {
+            Get-ChildItem "$arte/Standalone" -Filter *.exe | ForEach-Object {
+              $base = $_.BaseName
+              Compress-Archive -Path $_.FullName -DestinationPath ("upload/{0}-windows-standalone.zip" -f $base)
+            }
           }
 
       - name: Upload artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: AndroidVoiceChanger-windows
+          name: windows-builds
           path: upload/*
