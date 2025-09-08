@@ -17,7 +17,7 @@ android {
         externalNativeBuild {
             cmake {
                 // 追記式にするか、単一文字列でもOK
-                cppFlags += listOf("-std=c++17", "-O3")
+                cppFlags "-std=c++17 -O3"
             }
         }
         ndk {
