@@ -1,0 +1,83 @@
+name: Build JUCE Plugin
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  macos:
+    name: macOS (VST3/AU/Standalone)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure (CMake)
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+            -G "Xcode"
+      - name: Build (Release)
+        run: |
+          cmake --build build --config Release
+
+      - name: Package artifacts
+        run: |
+          set -e
+          ARTE=build/AndroidVoiceChanger_artefacts/Release
+          mkdir -p upload
+          # VST3
+          if [ -d "$ARTE/VST3/AndroidVoiceChanger.vst3" ]; then
+            ditto -c -k --sequesterRsrc --keepParent "$ARTE/VST3/AndroidVoiceChanger.vst3" "upload/AndroidVoiceChanger-macOS-vst3.zip"
+          fi
+          # AU (.component)
+          if [ -d "$ARTE/AU/AndroidVoiceChanger.component" ]; then
+            ditto -c -k --sequesterRsrc --keepParent "$ARTE/AU/AndroidVoiceChanger.component" "upload/AndroidVoiceChanger-macOS-au.zip"
+          fi
+          # Standalone app
+          if [ -d "$ARTE/Standalone/AndroidVoiceChanger.app" ]; then
+            ditto -c -k --sequesterRsrc --keepParent "$ARTE/Standalone/AndroidVoiceChanger.app" "upload/AndroidVoiceChanger-macOS-standalone.zip"
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AndroidVoiceChanger-macOS
+          path: upload/*
+
+  windows:
+    name: Windows (VST3/Standalone)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure (CMake)
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -G "Visual Studio 17 2022"
+          -A x64
+
+      - name: Build (Release)
+        run: cmake --build build --config Release
+
+      - name: Package artifacts
+        shell: pwsh
+        run: |
+          $arte = "build/AndroidVoiceChanger_artefacts/Release"
+          New-Item -ItemType Directory -Force -Path upload | Out-Null
+          if (Test-Path "$arte/VST3/AndroidVoiceChanger.vst3") {
+            Compress-Archive -Path "$arte/VST3/AndroidVoiceChanger.vst3" -DestinationPath "upload/AndroidVoiceChanger-windows-vst3.zip"
+          }
+          if (Test-Path "$arte/Standalone/AndroidVoiceChanger.exe") {
+            Compress-Archive -Path "$arte/Standalone/AndroidVoiceChanger.exe" -DestinationPath "upload/AndroidVoiceChanger-windows-standalone.zip"
+          }
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AndroidVoiceChanger-windows
+          path: upload/*
